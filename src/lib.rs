@@ -1,0 +1,281 @@
+use std::collections::HashMap;
+use std::rc::{Rc, Weak};
+use std::cell::RefCell;
+// use std::fmt;
+
+
+fn escape_ascii(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+
+    for c in s.chars() {
+        match c {
+            '"' => result.push_str("&quot;"),
+            '\'' => result.push_str("&apos;"),
+            '&' => result.push_str("&amp;"),
+            '<' => result.push_str("&lt;"),
+            '>' => result.push_str("&gt;"),
+            _ => result.push(c),
+        }
+    }
+
+    result
+}
+
+fn un_escape_ascii(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+
+    let mut iter = s.chars();
+    while let Some(c) = iter.next() {
+        if c == '&' {
+            let mut name = String::new();
+            while let Some(c) = iter.next() {
+                if c == ';' {
+                    break;
+                }
+                name.push(c);
+            }
+            match name.as_str() {
+                "quot" => result.push('"'),
+                "apos" => result.push('\''),
+                "amp" => result.push('&'),
+                "lt" => result.push('<'),
+                "gt" => result.push('>'),
+                _ => result.push('&'),
+            }
+        } else {
+            result.push(c);
+        }
+    }
+
+    result
+}
+
+
+#[derive(Clone)]
+pub struct Element {
+    inner: Rc<RefCell<ElementInner>>,
+}
+
+struct ElementInner {
+    parent: Option<Weak<RefCell<ElementInner>>>,
+    children: Vec<Element>,
+    tag: String,
+    content: String,
+    kws: HashMap<String, String>,
+    onetag: bool, // 是否为单标签
+    pre: bool, // 是否为原文本内容
+}
+
+impl Element {
+    pub fn new(tag: impl Into<String>, content: impl Into<String>) -> Self {
+        Self {
+            inner: Rc::new(RefCell::new(ElementInner {
+                parent: None,
+                children: Vec::new(),
+                tag: tag.into(),
+                content: escape_ascii(&content.into()),
+                // 默认值
+                kws: HashMap::new(),
+                onetag: false,
+                pre: false,
+            }))
+        }
+    }
+    pub fn kws(self, mut kws: HashMap<String, String>) -> Self {
+        for (_, v) in &mut kws {
+            *v = escape_ascii(v);
+        }
+        self.inner.borrow_mut().kws = kws;
+        self
+    }
+    pub fn onetag(self, onetag: bool) -> Self {
+        self.inner.borrow_mut().onetag = onetag;
+        self
+    }
+    pub fn pre(self, pre: bool) -> Self {
+        let mut inner = self.inner.borrow_mut();
+        inner.pre = pre;
+        if pre {
+            inner.content = un_escape_ascii(&inner.content);
+            for (_, v) in &mut inner.kws {
+                *v = un_escape_ascii(v);
+            }
+        }
+        drop(inner);
+        self
+    }
+
+    /// 添加子元素
+    pub fn add(&self, elem: Element) -> &Self {
+        {
+            let mut inner = self.inner.borrow_mut();
+            elem.inner.borrow_mut().parent = Some(Rc::downgrade(&self.inner));
+            inner.children.push(elem);
+        }
+        self
+    }
+
+    /// 添加子元素并返回Self
+    pub fn add_with(self, elem: Element) -> Self {
+        self.add(elem);
+        self
+    }
+
+    /// 获取父元素
+    pub fn parent(&self) -> Option<Element> {
+        self.inner.borrow()
+            .parent
+            .as_ref()
+            .and_then(|weak| weak.upgrade())
+            .map(|rc| Element { inner: rc })
+    }
+
+    /// 设置内容
+    pub fn configcnt(&self, content: impl Into<String>) -> &Self {
+        let mut inner = self.inner.borrow_mut();
+        if inner.pre {
+            inner.content = content.into();
+        } else {
+            inner.content = escape_ascii(&content.into());
+        }
+        self
+    }
+
+    /// 设置属性
+    pub fn configkws(&self, mut kws: HashMap<String, String>) -> &Self {
+        let mut inner = self.inner.borrow_mut();
+        if !inner.pre {
+            for (_, v) in &mut kws {
+                *v = escape_ascii(v);
+            }
+        }
+        inner.kws = kws;
+        self
+    }
+
+    /// 获取子元素
+    pub fn children(&self) -> Vec<Element> {
+        self.inner.borrow().children.clone()
+    }
+
+    /// 移除指定位置子元素
+    pub fn remove_child(&self, index: usize) -> Option<Element> {
+        let mut inner = self.inner.borrow_mut();
+        if index < inner.children.len() {
+            let child = inner.children.remove(index);
+            child.inner.borrow_mut().parent = None;
+            Some(child)
+        } else {
+            None
+        }
+    }
+
+    /// 渲染为html字符串
+    pub fn render(&self, split_s: &str) -> String {
+        let inner = self.inner.borrow();
+        if inner.tag.is_empty() {
+            // 空标签
+            return inner.content.clone();
+        }
+        
+        let mut htmltext = format!("<{}", inner.tag);
+
+        // 处理属性
+        for (k, v) in &inner.kws {
+            htmltext.push_str(&format!(" {}=\"{}\"", k, v));
+        }
+        htmltext.push('>');
+
+        htmltext.push_str(&inner.content);
+
+        // 处理子元素
+        for item in &inner.children {
+            let subtext = item.render(split_s);
+            htmltext.push_str(split_s);
+            htmltext.push_str(&subtext);
+        }
+
+        if inner.onetag {
+            // 单标签
+            htmltext.push_str(split_s);
+        } else if !inner.children.is_empty() {
+            // 有子标签
+            htmltext.push_str(split_s);
+            htmltext.push_str(&format!("</{}>", inner.tag))
+        } else {
+            // 无子标签
+            htmltext.push_str(&format!("</{}>", inner.tag))
+        }
+
+        htmltext
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use std::io::Write;
+
+    fn write_file(filename: &str, content: &str) {
+        let mut file = File::create(filename).unwrap();
+        file.write_all(content.as_bytes()).unwrap();
+    }
+
+    #[test]
+    fn it_works() {
+        let root = Element::new("html", "");
+
+        // 短元素用add_with()方法添加
+        let head = Element::new("head", "")
+            .add_with(Element::new("title", "My Page"))
+            .add_with(
+                Element::new("meta", "")
+                    .kws(HashMap::from([("charset".to_string(), "utf-8".to_string())]))
+                );
+        root.add(head);
+
+        let body = Element::new("body", "");
+        root.add(body.clone());
+
+        let div = Element::new("div", "");
+        body.add(div.clone());
+        let mut attrs = HashMap::new();
+        attrs.insert("id".to_string(), "main".to_string());
+        attrs.insert("class".to_string(), "container<>".to_string());
+        div.configkws(attrs);
+        div.configcnt("&<html><div>content内容&");
+        
+        // 输出父元素此刻的html代码
+        if let Some(parent) = div.parent() {
+            println!("{}", parent.render("\n"));
+        }
+
+        div.add(Element::new("h1", "cpphtmlbuilder"));
+
+        // 添加列表
+        let ul = Element::new("ul", "");
+        // let ul = Element::new("ol", "");
+        div.add(ul.clone());
+        
+        for i in 0..10 {
+            ul.add(Element::new("li", &i.to_string()));
+        }
+        
+        // 删除倒数第二个li
+        {
+            let children_count = ul.children().len();
+            if children_count >= 2 {
+                ul.remove_child(children_count - 2);
+            }
+        }
+
+        div.add(Element::new("", "content内容，只要标签名为空即可"));
+
+        let result = root.render("\n");
+        println!("{}", result);
+
+        write_file("test.html", &result);
+    }
+}

@@ -1,0 +1,8 @@
+[package]
+name = "htmlbuilder"
+version = "0.1.0"
+edition = "2024"
+description = "Build html flexibly and easily in Rust"
+license = "MIT"
+
+[dependencies]
