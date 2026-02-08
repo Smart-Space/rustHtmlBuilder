@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::rc::{Rc, Weak};
 use std::cell::RefCell;
-// use std::fmt;
+use std::fmt;
 
 
 fn escape_ascii(s: &str) -> String {
@@ -61,12 +61,21 @@ struct ElementInner {
     children: Vec<Element>,
     tag: String,
     content: String,
-    kws: HashMap<String, String>,
+    kws: HashMap<&'static str, String>,
     onetag: bool, // 是否为单标签
     pre: bool, // 是否为原文本内容
 }
 
 impl Element {
+    /// 创建元素
+    /// 
+    /// tag: 标签名
+    /// 
+    /// content: 内容
+    /// 
+    /// ```
+    /// let div = Element::new("div", "content");
+    /// ```
     pub fn new(tag: impl Into<String>, content: impl Into<String>) -> Self {
         Self {
             inner: Rc::new(RefCell::new(ElementInner {
@@ -81,17 +90,31 @@ impl Element {
             }))
         }
     }
-    pub fn kws(self, mut kws: HashMap<String, String>) -> Self {
+
+    /// 设置属性名
+    /// 
+    /// ```
+    /// let div = Element::new("div", "content").kws(HashMap::from([("id", "main".to_string())]));
+    /// ```
+    pub fn kws(self, mut kws: HashMap<&'static str, String>) -> Self {
         for (_, v) in &mut kws {
             *v = escape_ascii(v);
         }
         self.inner.borrow_mut().kws = kws;
         self
     }
+
+    /// 设置是否单标签
+    /// 
+    /// 如果是单标签，输出为字符串时将仅输出标签本身
     pub fn onetag(self, onetag: bool) -> Self {
         self.inner.borrow_mut().onetag = onetag;
         self
     }
+
+    /// 设置是否为原文本内容
+    /// 
+    /// 如果为原文本内容，则内容将不会被转义
     pub fn pre(self, pre: bool) -> Self {
         let mut inner = self.inner.borrow_mut();
         inner.pre = pre;
@@ -142,7 +165,7 @@ impl Element {
     }
 
     /// 设置属性
-    pub fn configkws(&self, mut kws: HashMap<String, String>) -> &Self {
+    pub fn configkws(&self, mut kws: HashMap<&'static str, String>) -> &Self {
         let mut inner = self.inner.borrow_mut();
         if !inner.pre {
             for (_, v) in &mut kws {
@@ -211,6 +234,28 @@ impl Element {
     }
 }
 
+impl PartialEq for Element {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.inner, &other.inner)
+    }
+}
+
+impl fmt::Debug for Element {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Element[{:?}]", self.inner.borrow().tag)?;
+        if !self.inner.borrow().content.is_empty() {
+            writeln!(f, "  content: {:?}", self.inner.borrow().content)?;
+        }
+        if !self.inner.borrow().kws.is_empty() {
+            writeln!(f, "  kws: {:?}", self.inner.borrow().kws)?;
+        }
+        if !self.inner.borrow().children.is_empty() {
+            writeln!(f, "  children<{}>", self.inner.borrow().children.len())?;
+        }
+        Ok(())
+    }
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -232,7 +277,7 @@ mod tests {
             .add_with(Element::new("title", "My Page"))
             .add_with(
                 Element::new("meta", "")
-                    .kws(HashMap::from([("charset".to_string(), "utf-8".to_string())]))
+                    .kws(HashMap::from([("charset", "utf-8".to_string())]))
                 );
         root.add(head);
 
@@ -242,8 +287,8 @@ mod tests {
         let div = Element::new("div", "");
         body.add(div.clone());
         let mut attrs = HashMap::new();
-        attrs.insert("id".to_string(), "main".to_string());
-        attrs.insert("class".to_string(), "container<>".to_string());
+        attrs.insert("id", "main".to_string());
+        attrs.insert("class", "container<>".to_string());
         div.configkws(attrs);
         div.configcnt("&<html><div>content内容&");
         
@@ -277,5 +322,34 @@ mod tests {
         println!("{}", result);
 
         write_file("test.html", &result);
+    }
+
+    #[test]
+    fn test_eq() {
+        let a = Element::new("div", "");
+        let b = Element::new("div", "");
+        assert_ne!(a, b);
+
+        let a = Element::new("div", "");
+        let b = a.clone();
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_debug() {
+        let a = Element::new("div", "");
+        println!("{:?}", a);
+
+        let b = Element::new("div", "content").kws(HashMap::from([("id", "main".to_string())]));
+        a.add(b.clone());
+        println!("{:?}", a);
+
+        let c = Element::new("ul", "");
+        for i in 0..10 {
+            c.add(Element::new("li", &i.to_string()));
+        }
+        b.add(c.clone());
+        println!("{:?}", b);
+        println!("{:?}", c);
     }
 }
