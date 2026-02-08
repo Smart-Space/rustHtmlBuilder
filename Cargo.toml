@@ -5,5 +5,6 @@ edition = "2024"
 description = "Build html flexibly and easily in Rust"
 license = "MIT"
 repository = "https://github.com/Smart-Space/rustHtmlBuilder"
+exclude = ["Cargo.lock", "test.html", "rustHtmlBuilder.code-workspace"]
 
 [dependencies]
