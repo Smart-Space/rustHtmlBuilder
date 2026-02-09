@@ -90,8 +90,7 @@ impl Element {
             }))
         }
     }
-
-    /// 设置属性名
+    /// 设置全部属性
     /// 
     /// ```
     /// let div = Element::new("div", "content").kws(HashMap::from([("id", "main".to_string())]));
@@ -103,7 +102,6 @@ impl Element {
         self.inner.borrow_mut().kws = kws;
         self
     }
-
     /// 设置是否单标签
     /// 
     /// 如果是单标签，输出为字符串时将仅输出标签本身
@@ -111,20 +109,20 @@ impl Element {
         self.inner.borrow_mut().onetag = onetag;
         self
     }
-
     /// 设置是否为原文本内容
     /// 
     /// 如果为原文本内容，则内容将不会被转义
     pub fn pre(self, pre: bool) -> Self {
-        let mut inner = self.inner.borrow_mut();
-        inner.pre = pre;
-        if pre {
-            inner.content = un_escape_ascii(&inner.content);
-            for (_, v) in &mut inner.kws {
-                *v = un_escape_ascii(v);
+        {
+            let mut inner = self.inner.borrow_mut();
+            inner.pre = pre;
+            if pre {
+                inner.content = un_escape_ascii(&inner.content);
+                for (_, v) in &mut inner.kws {
+                    *v = un_escape_ascii(v);
+                }
             }
         }
-        drop(inner);
         self
     }
 
@@ -142,6 +140,22 @@ impl Element {
     pub fn add_with(self, elem: Element) -> Self {
         self.add(elem);
         self
+    }
+
+    /// 设置一个属性，不影响原有属性
+    pub fn set_attr(&self, name: &'static str, value: impl Into<String>) {
+        let mut inner = self.inner.borrow_mut();
+        inner.kws.insert(name, escape_ascii(&value.into()));
+    }
+
+    /// 批量设置属性，不影响原有属性
+    pub fn set_attrs<V>(&self, attrs: &[(&'static str, V)])
+    where
+        V: AsRef<str>,
+    {
+        for (k, v) in attrs {
+            self.set_attr(k, v.as_ref());
+        }
     }
 
     /// 获取父元素
@@ -164,7 +178,9 @@ impl Element {
         self
     }
 
-    /// 设置属性
+    /// 设置全部属性
+    /// 
+    /// 当`pre == true`时，内容将不会被转义
     pub fn configkws(&self, mut kws: HashMap<&'static str, String>) -> &Self {
         let mut inner = self.inner.borrow_mut();
         if !inner.pre {
@@ -286,10 +302,7 @@ mod tests {
 
         let div = Element::new("div", "");
         body.add(div.clone());
-        let mut attrs = HashMap::new();
-        attrs.insert("id", "main".to_string());
-        attrs.insert("class", "container<>".to_string());
-        div.configkws(attrs);
+        div.set_attrs(&[("id", "main"), ("class", "container<>")]);
         div.configcnt("&<html><div>content内容&");
         
         // 输出父元素此刻的html代码
@@ -297,7 +310,7 @@ mod tests {
             println!("{}", parent.render("\n"));
         }
 
-        div.add(Element::new("h1", "cpphtmlbuilder"));
+        div.add(Element::new("h1", "rusthtmlbuilder"));
 
         // 添加列表
         let ul = Element::new("ul", "");
@@ -340,7 +353,8 @@ mod tests {
         let a = Element::new("div", "");
         println!("{:?}", a);
 
-        let b = Element::new("div", "content").kws(HashMap::from([("id", "main".to_string())]));
+        let b = Element::new("div", "content");
+        b.set_attr("id", "main");
         a.add(b.clone());
         println!("{:?}", a);
 
@@ -351,5 +365,7 @@ mod tests {
         b.add(c.clone());
         println!("{:?}", b);
         println!("{:?}", c);
+
+        println!("{}", a.render("\n"));
     }
 }

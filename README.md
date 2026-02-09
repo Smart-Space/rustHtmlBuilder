@@ -2,6 +2,32 @@
 
 A flexible html generator for rust.
 
+## create an `Element`
+
+```rust
+use htmlbuilder::Element
+
+let root = Element::new("html", "");
+let result = root.render("\n");
+```
+
+## create with attributes
+
+```rust
+let body = Element::new("body", "");
+let div = Element::new("div", "");
+// use clone because div is used later
+body.add(div.clone());
+// set attributes for div
+div.set_attrs(&[("id", "main"), ("class", "container<>")]);
+```
+
+> `Element` is `Rc<RefCell<...>>` exactly.
+
+For more usage methods, please refer to the documentation.
+
+## A complex example
+
 ```rust
 use htmlbuilder::Element
 
@@ -24,6 +50,7 @@ fn main()
     let mut attrs = HashMap::new();
     attrs.insert("id", "main".to_string());
     attrs.insert("class", "container<>".to_string());
+	// configkws uses HashMap to replace all attributes
     div.configkws(attrs);
     div.configcnt("&<html><div>content&");
 
@@ -32,7 +59,7 @@ fn main()
         println!("{}", parent.render("\n"));
     }
 
-    div.add(Element::new("h1", "cpphtmlbuilder"));
+    div.add(Element::new("h1", "rusthtmlbuilder"));
 
     // append <ul>
     let ul = Element::new("ul", "");
