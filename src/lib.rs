@@ -90,7 +90,7 @@ impl Element {
             }))
         }
     }
-    /// 设置全部属性
+    /// 设置全部属性（HashMap）
     /// 
     /// ```
     /// let div = Element::new("div", "content").kws(HashMap::from([("id", "main".to_string())]));
@@ -101,6 +101,18 @@ impl Element {
         }
         self.inner.borrow_mut().kws = kws;
         self
+    }
+    /// 设置全部属性
+    /// 
+    /// ```
+    /// let div = Element::new("div", "content").attrs([("id", "main"), ("class", "test")]);
+    /// ```
+    pub fn attrs(self, attrs: &[(&'static str, &str)]) -> Self {
+        let mut kws: HashMap<&str, String> = HashMap::new();
+        for (k, v) in attrs {
+            kws.insert(k, escape_ascii(v));
+        }
+        self.kws(kws)
     }
     /// 设置是否单标签
     /// 
@@ -209,6 +221,26 @@ impl Element {
         }
     }
 
+    /// 删除指定子元素
+    pub fn remove_child_by_ref(&self, child: &Element) -> bool {
+        let mut inner = self.inner.borrow_mut();
+        if let Some(index) = inner.children.iter().position(|x| x == child) {
+            inner.children.remove(index);
+            child.inner.borrow_mut().parent = None;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// 删除所有子元素
+    pub fn remove_all_children(&self) {
+        let mut inner = self.inner.borrow_mut();
+        for child in inner.children.drain(..) {
+            child.inner.borrow_mut().parent = None;
+        }
+    }
+
     /// 渲染为html字符串
     pub fn render(&self, split_s: &str) -> String {
         let inner = self.inner.borrow();
@@ -259,6 +291,11 @@ impl PartialEq for Element {
 impl fmt::Debug for Element {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Element[{:?}]", self.inner.borrow().tag)?;
+        if self.inner.borrow().parent.is_some() {
+            writeln!(f, "  parent: HAS")?;
+        } else {
+            writeln!(f, "  parent: None")?;
+        }
         if !self.inner.borrow().content.is_empty() {
             writeln!(f, "  content: {:?}", self.inner.borrow().content)?;
         }
@@ -367,5 +404,42 @@ mod tests {
         println!("{:?}", c);
 
         println!("{}", a.render("\n"));
+    }
+
+    #[test]
+    fn test_attrs() {
+        // 设置初始属性
+        let a = Element::new("a", "content").attrs(&[("id", "main"), ("class", "test")]);
+        println!("{:?}", a);
+        // 以下更改不会影响原有属性
+        a.set_attrs(&[("href", "https://www.rust-lang.org/"), ("target", "_blank")]);
+        println!("{:?}", a);
+        // 以下更改会修改全部，相当于自身调用一次kws()
+        a.configkws(HashMap::from([
+            ("href", "https://www.rust-lang.org/zh-CN/".to_string()),
+            ("target", "_self".to_string()),
+        ]));
+        println!("{:?}", a);
+    }
+
+    #[test]
+    fn test_delete() {
+        let a = Element::new("div", "");
+        let b = Element::new("div", "");
+        let c = Element::new("div", "");
+        a.add(b.clone());
+        a.add(c.clone());
+        assert_eq!(a.children().len(), 2);
+        assert_eq!(a.remove_child(1), Some(c.clone()));
+        assert_eq!(a.children().len(), 1);
+        assert_eq!(a.remove_child(0), Some(b.clone()));
+        assert_eq!(a.children().len(), 0);
+        assert_eq!(a.remove_child(0), None);
+        a.add(b.clone());
+        a.add(c.clone());
+        assert_eq!(a.remove_child_by_ref(&b), true);
+        assert_eq!(a.remove_child_by_ref(&b), false);
+        a.remove_all_children();
+        assert_eq!(a.children().len(), 0);
     }
 }

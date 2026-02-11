@@ -31,7 +31,7 @@ For more usage methods, please refer to the documentation.
 ```rust
 use htmlbuilder::Element
 
-fn main() 
+fn main() {
     let root = Element::new("html", "");
 
     let head = Element::new("head", "")
