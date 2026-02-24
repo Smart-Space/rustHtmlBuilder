@@ -37,7 +37,7 @@ fn main() {
     let head = Element::new("head", "")
         .add_with(Element::new("title", "My Page"))
         .add_with(
-            Element::new("meta", "")
+            Element::new("meta", "").ontag(true)
                 .kws(HashMap::from([("charset", "utf-8".to_string())]))
             );
     root.add(head);
@@ -90,11 +90,11 @@ The final output:
 <html>
 <head>
 <title>My Page</title>
-<meta charset="utf-8"></meta>
+<meta charset="utf-8"/>
 </head>
 <body>
 <div class="container&lt;&gt;" id="main">&amp;&lt;html&gt;&lt;div&gt;content&amp;
-<h1>cpphtmlbuilder</h1>
+<h1>rusthtmlbuilder</h1>
 <ul>
 <li>0</li>
 <li>1</li>

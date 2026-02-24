@@ -255,6 +255,13 @@ impl Element {
         for (k, v) in &inner.kws {
             htmltext.push_str(&format!(" {}=\"{}\"", k, v));
         }
+
+        if inner.onetag {
+            // 单标签
+            htmltext.push_str("/>");
+            return htmltext;
+        }
+
         htmltext.push('>');
 
         htmltext.push_str(&inner.content);
@@ -266,17 +273,11 @@ impl Element {
             htmltext.push_str(&subtext);
         }
 
-        if inner.onetag {
-            // 单标签
-            htmltext.push_str(split_s);
-        } else if !inner.children.is_empty() {
+        if !inner.children.is_empty() {
             // 有子标签
             htmltext.push_str(split_s);
-            htmltext.push_str(&format!("</{}>", inner.tag))
-        } else {
-            // 无子标签
-            htmltext.push_str(&format!("</{}>", inner.tag))
         }
+        htmltext.push_str(&format!("</{}>", inner.tag));
 
         htmltext
     }
@@ -329,7 +330,7 @@ mod tests {
         let head = Element::new("head", "")
             .add_with(Element::new("title", "My Page"))
             .add_with(
-                Element::new("meta", "")
+                Element::new("meta", "").onetag(true)
                     .kws(HashMap::from([("charset", "utf-8".to_string())]))
                 );
         root.add(head);
